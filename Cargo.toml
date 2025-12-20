@@ -18,6 +18,11 @@ config = "0.13"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+tracing-bunyan-formatter = "0.3"
+tracing-log = "0.2"
+
 [dev-dependencies]
 reqwest = "0.12"
 
