@@ -11,7 +11,6 @@ pub struct FormData {
     name: String,
 }
 
-// Let's start simple: we always return a 200 OK
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
     let request_id = Uuid::new_v4();
     let request_span = tracing::info_span!(
@@ -22,10 +21,6 @@ pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> Ht
     );
     // tracing::info!("Request_id {} - Saving new subscriber details to the database.", request_id);
     let _request_span_guard = request_span.enter();
-
-    // We do not call `.enter` on query_span!
-    // `.instrument` takes care of it at the right moments
-    // in the query future lifetime
     let query_span = tracing::info_span!("Saving new subscriber details in the database");
 
     let result = sqlx::query!(
