@@ -1,5 +1,6 @@
 use sqlx::PgPool;
 use std::net::TcpListener;
+use secrecy::ExposeSecret;
 
 use rWebService::configuration::get_configuration;
 use rWebService::startup::run;
@@ -13,7 +14,7 @@ async fn main() -> Result<(), std::io::Error> {
 
     // Panic if we can't read configuration
     let configuration = get_configuration().expect("Failed to read configuration.");
-    let connection_pool = PgPool::connect(&configuration.database.connection_string())
+    let connection_pool = PgPool::connect(configuration.database.connection_string().expose_secret())
         .await
         .expect("Failed to connect to Postgres.");
 
