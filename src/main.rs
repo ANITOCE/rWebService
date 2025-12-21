@@ -1,13 +1,20 @@
+use sqlx::PgPool;
 use std::net::TcpListener;
+use secrecy::ExposeSecret;
+
 use rWebService::configuration::get_configuration;
 use rWebService::startup::run;
-use sqlx::PgPool;
+use rWebService::telemetry::{get_subscriber, init_subscriber};
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
+    
+    let subscriber = get_subscriber("rWebService".into(), "info".into(), std::io::stdout);
+    init_subscriber(subscriber);
+
     // Panic if we can't read configuration
     let configuration = get_configuration().expect("Failed to read configuration.");
-    let connection_pool = PgPool::connect(&configuration.database.connection_string())
+    let connection_pool = PgPool::connect(configuration.database.connection_string().expose_secret())
         .await
         .expect("Failed to connect to Postgres.");
 
