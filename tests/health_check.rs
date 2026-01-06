@@ -63,7 +63,7 @@ async fn spawn_app() -> TestApp {
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     // Create database
-    let mut connection = PgConnection::connect(&config.connection_string_without_db().expose_secret())
+    let mut connection = PgConnection::connect_with(&config.connect_options())
         .await
         .expect("Failed to connect to Postgres");
     connection
@@ -71,7 +71,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("Failed to create database.");
     // Migrate database
-    let connection_pool = PgPool::connect(&config.connection_string().expose_secret())
+    let connection_pool = PgPool::connect_with(config.connect_options())
         .await
         .expect("Failed to connect to Postgres.");
     sqlx::migrate!("./migrations")
@@ -82,15 +82,15 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     return connection_pool;
 }
 
-pub async fn delect_test_database(config: &DatabaseSettings) {
-    let mut connection = PgConnection::connect(&config.connection_string_without_db().expose_secret())
-        .await
-        .expect("Failed to connect to Postgres");
-    connection
-        .execute(format!(r#"DROP DATABASE "{}";"#, config.database_name).as_str())
-        .await
-        .expect("Failed to delete database.");
-}
+// pub async fn delect_test_database(config: &DatabaseSettings) {
+//     let mut connection = PgConnection::connect(&config.connection_string().expose_secret())
+//         .await
+//         .expect("Failed to connect to Postgres");
+//     connection
+//         .execute(format!(r#"DROP DATABASE "{}";"#, config.database_name).as_str())
+//         .await
+//         .expect("Failed to delete database.");
+// }
 
 // `tokio::test` is the testing equivalent of `tokio::main`.
 // It also spares you from having to specify the `#[test]` attribute.
