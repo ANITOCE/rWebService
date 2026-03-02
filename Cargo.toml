@@ -33,6 +33,10 @@ tracing-actix-web = "0.7"
 [dev-dependencies]
 reqwest = "0.12"
 claims = "0.8"
+fake = "4.4.0"
+quickcheck = "1.1.0"
+quickcheck_macros = "1.2.0"
+rand = "0.10"
 
 # Using table-like toml syntax to avoid a super-long line!
 [dependencies.sqlx]
