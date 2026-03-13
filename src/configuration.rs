@@ -3,10 +3,26 @@ use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
+use crate::domain::SubscriberEmail;
+
 #[derive(Deserialize)]
 pub struct Settings {
     pub database: DatabaseSettings,
     pub application: ApplicationSettings,
+    pub email_client: EmailClientSettings,
+}
+
+#[derive(serde::Deserialize)]
+pub struct EmailClientSettings {
+    pub base_url: String,
+    pub sender_email: String,
+    pub authorization_token: Secret<String>,
+}
+
+impl EmailClientSettings {
+    pub fn sender(&self) -> Result<SubscriberEmail, String> {
+        return SubscriberEmail::parse(self.sender_email.clone());
+    }
 }
 
 #[derive(Deserialize)]
@@ -42,9 +58,9 @@ impl DatabaseSettings {
             .password(self.password.expose_secret())
             .port(self.port)
             .ssl_mode(ssl_mode)
-            .database(&self.database_name)
+            .database(&self.database_name);
     }
-    
+
     pub fn connect_options_in_test(&self) -> PgConnectOptions {
         let ssl_mode = if self.require_ssl {
             PgSslMode::Require
@@ -58,7 +74,7 @@ impl DatabaseSettings {
             .password("liu8381")
             .port(self.port)
             .ssl_mode(ssl_mode)
-            .database("postgres")
+            .database("postgres");
     }
 }
 
@@ -82,9 +98,10 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
         .add_source(config::File::from(
             configuration_directory.join(environment_filename),
         ))
-        .add_source(config::Environment::with_prefix("APP")
-            .prefix_separator("_")
-            .separator("__")
+        .add_source(
+            config::Environment::with_prefix("APP")
+                .prefix_separator("_")
+                .separator("__"),
         )
         .build()?;
     // Try to convert the configuration values it read into
@@ -113,7 +130,10 @@ impl TryFrom<String> for Environment {
         return match s.to_lowercase().as_str() {
             "local" => Ok(Self::Local),
             "production" => Ok(Self::Production),
-            other => Err(format!("{} is not a supported environment. Use either `local` or `production`.", other)),
-        }
+            other => Err(format!(
+                "{} is not a supported environment. Use either `local` or `production`.",
+                other
+            )),
+        };
     }
 }
