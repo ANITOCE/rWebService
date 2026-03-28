@@ -65,22 +65,6 @@ impl DatabaseSettings {
             .ssl_mode(ssl_mode)
             .database(&self.database_name);
     }
-
-    pub fn connect_options_in_test(&self) -> PgConnectOptions {
-        let ssl_mode = if self.require_ssl {
-            PgSslMode::Require
-        } else {
-            // Try an encrypted connection, fallback to unencrypted if it fails
-            PgSslMode::Prefer
-        };
-        return PgConnectOptions::new()
-            .host(&self.host)
-            .username("postgres")
-            .password("liu8381")
-            .port(self.port)
-            .ssl_mode(ssl_mode)
-            .database("postgres");
-    }
 }
 
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {

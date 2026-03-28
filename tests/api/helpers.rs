@@ -1,9 +1,10 @@
 use std::sync::LazyLock;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
-use std::net::TcpListener;
+use secrecy::Secret;
 use uuid::Uuid;
+use wiremock::MockServer;
 
-use rWebService::configuration::{self, DatabaseSettings, get_configuration};
+use rWebService::configuration::{DatabaseSettings, get_configuration};
 use rWebService::startup::{Application, get_connection_pool};
 use rWebService::telemetry::{get_subscriber, init_subscriber};
 
@@ -29,6 +30,8 @@ pub struct TestApp {
     pub db_pool: PgPool,
     // only for test database cleanup
     // config: DatabaseSettings,
+
+    pub email_server: MockServer,
 }
 
 impl TestApp {
@@ -56,11 +59,13 @@ pub async fn spawn_app() -> TestApp {
     // let port = listener.local_addr().unwrap().port();
     // let address = format!("http://127.0.0.1:{}", port);
 
+    let email_server = MockServer::start().await;
+
     let configuration = {
         let mut config = get_configuration().expect("Failed to read configuration");
         config.database.database_name = format!("test_{}", Uuid::new_v4().to_string());
-        // Use a random OS port
-        // config.database.port = 0;
+        config.application.port = 0;
+        config.email_client.base_url = email_server.uri();
         config
     };
 
@@ -76,13 +81,23 @@ pub async fn spawn_app() -> TestApp {
     return TestApp {
         address,
         db_pool: get_connection_pool(&configuration.database),
+        email_server,
         // config: configuration.database,
     };
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     // Create database
-    let mut connection = PgConnection::connect_with(&config.connect_options_in_test())
+
+    let maintenance_settings = DatabaseSettings {
+        database_name: "postgres".to_string(),
+        username: "postgres".to_string(),
+        password: Secret::new("liu8381".to_string()),
+        ..config.clone()
+    };
+
+    // connect to the Postgres instance for creating the test database
+    let mut connection = PgConnection::connect_with(&maintenance_settings.connect_options())
         .await
         .expect("Failed to connect to Postgres");
     connection
@@ -90,7 +105,8 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("Failed to create database.");
     // Migrate database
-    let connection_pool = PgPool::connect_with(config.connect_options_in_test())
+    // connect the test database for running the migrations
+    let connection_pool = PgPool::connect_with(config.connect_options())
         .await
         .expect("Failed to connect to Postgres.");
     sqlx::migrate!("./migrations")
@@ -112,7 +128,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
 // }
 
 pub async fn delect_test_database(config: &DatabaseSettings) {
-    let mut connection = PgConnection::connect_with(&config.connect_options_in_test())
+    let mut connection = PgConnection::connect_with(&config.connect_options())
         .await
         .expect("Failed to connect to Postgres");
     connection
