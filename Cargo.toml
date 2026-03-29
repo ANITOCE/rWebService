@@ -20,6 +20,7 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 unicode-segmentation = "1.12"
 validator = { version = "0.20", features = ["derive"] }
+rand = { version = "0.10", features = ["std_rng"] }
 
 # version "0.10" some functions are more defferent with "0.8"
 secrecy = { version = "0.8", features = ["serde"] }
@@ -35,9 +36,9 @@ claims = "0.8"
 fake = "4.4.0"
 quickcheck = "1.1.0"
 quickcheck_macros = "1.2.0"
-rand = "0.10"
 wiremock = "0.6"
 serde_json = "1.0"
+linkify = "0.10"
 
 # Using table-like toml syntax to avoid a super-long line!
 [dependencies.sqlx]
