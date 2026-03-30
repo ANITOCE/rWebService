@@ -1,5 +1,8 @@
 application: 
   host: "0.0.0.0"
+  # This URL need to be the public URL (DNS) of application
+  # Now it's just an test URL of localhost
+  base_url: "http://localhost:8000"
 database:
   require_ssl: true
 email_client:

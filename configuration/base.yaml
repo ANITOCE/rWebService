@@ -1,6 +1,5 @@
 application: 
   port: 8000
-  base_url: "http://127.0.0.1"
 database:
   host: "127.0.0.1"
   port: 5432
@@ -8,7 +7,7 @@ database:
   password: "liu8381"
   database_name: "newsletter"
 email_client:
-  base_url: "http://localhost"
-  sender_email: "test@gmail.com"
+  base_url: "https://api.postmarkapp.com"
+  sender_email: "rwebservice@liuservers.com"
   authorization_token: "6e7f7d76-7a51-49bb-b4ba-9ce9ec2cfa8a"
   timeout_milliseconds: 10000

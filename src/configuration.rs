@@ -35,6 +35,7 @@ pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
+    // The base URL of the application, used when constructing links in emails
     pub base_url: String,
 }
 

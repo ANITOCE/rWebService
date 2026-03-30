@@ -28,6 +28,7 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
 
 pub struct TestApp {
     pub address: String,
+    // The port is needed to retrieve the confirmation links embedded in the request to the email API.
     pub port: u16,
     pub db_pool: PgPool,
 
