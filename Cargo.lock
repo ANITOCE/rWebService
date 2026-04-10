@@ -2071,6 +2071,7 @@ name = "rWebService"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "anyhow",
  "chrono",
  "claims",
  "config",
@@ -2085,6 +2086,7 @@ dependencies = [
  "serde-aux",
  "serde_json",
  "sqlx",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-actix-web",

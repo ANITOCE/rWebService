@@ -22,6 +22,12 @@ unicode-segmentation = "1.12"
 validator = { version = "0.20", features = ["derive"] }
 rand = { version = "0.10", features = ["std_rng"] }
 
+# Error handling
+# "thiserror" for expected errors that we want to handle gracefully
+# "anyhow" for unexpected errors 
+thiserror = "2.0.18"
+anyhow = "1.0"
+
 # version "0.10" some functions are more defferent with "0.8"
 secrecy = { version = "0.8", features = ["serde"] }
 
