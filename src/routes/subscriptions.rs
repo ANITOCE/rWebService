@@ -132,7 +132,7 @@ pub async fn send_confirmation_email(
         confirmation_link
     );
     return email_client
-        .send_email(new_subscriber.email, "Welcome!", &html_body, &plain_body)
+        .send_email(&new_subscriber.email, "Welcome!", &html_body, &plain_body)
         .await;
 }
 
@@ -199,7 +199,7 @@ impl std::error::Error for StoreTokenError {
 }
 
 // Traversed the entire chain of errors that led to the print attempt failure.
-fn error_chain_fmt(
+pub fn error_chain_fmt(
     e: &impl std::error::Error,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
