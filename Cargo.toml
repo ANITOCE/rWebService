@@ -21,6 +21,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 unicode-segmentation = "1.12"
 validator = { version = "0.20", features = ["derive"] }
 rand = { version = "0.10", features = ["std_rng"] }
+base64 = "0.22.1"
 
 # Error handling
 # "thiserror" for expected errors that we want to handle gracefully
