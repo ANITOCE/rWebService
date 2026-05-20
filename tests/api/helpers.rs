@@ -1,5 +1,6 @@
 use rWebService::email_client;
 use secrecy::Secret;
+use sha3::Digest;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::LazyLock;
 use uuid::Uuid;
@@ -26,6 +27,36 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
     };
 });
 
+pub struct TestUser {
+    pub user_id: Uuid,
+    pub username: String,
+    pub password: String,
+}
+
+impl TestUser {
+    pub fn generate() -> Self {
+        Self {
+            user_id: Uuid::new_v4(),
+            username: Uuid::new_v4().to_string(),
+            password: Uuid::new_v4().to_string(),
+        }
+    }
+
+    async fn store(&self, pool: &PgPool) {
+        let password_hash = sha3::Sha3_256::digest(self.password.as_bytes());
+        let password_hash = format!("{:x}", password_hash);
+        sqlx::query!(
+            "INSERT INTO users (user_id, username, password_hash) VALUES ($1, $2, $3)",
+            self.user_id,
+            self.username,
+            password_hash,
+        )
+        .execute(pool)
+        .await
+        .expect("Failed to store test user.");
+    }
+}
+
 pub struct TestApp {
     pub address: String,
     // The port is needed to retrieve the confirmation links embedded in the request to the email API.
@@ -35,8 +66,9 @@ pub struct TestApp {
     // only for test database cleanup
     // check the test whether they pass
     // pub is_pass: bool,
-
     pub email_server: MockServer,
+
+    pub test_user: TestUser,
 }
 
 /// Confirmation links embedded in the request to the email API.
@@ -58,14 +90,14 @@ impl TestApp {
     }
 
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
-        reqwest::Client::new()
+        return reqwest::Client::new()
             .post(&format!("{}/newsletters", &self.address))
             // .basic_auth(&self.test_user.username, Some(&self.test_user.password))
-            .basic_auth(Uuid::new_v4().to_string(), Some(Uuid::new_v4().to_string()))
+            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .json(&body)
             .send()
             .await
-            .expect("Failed to execute request.")
+            .expect("Failed to execute request.");
     }
 
     pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {
@@ -130,13 +162,16 @@ pub async fn spawn_app() -> TestApp {
     let address = format!("http://localhost:{}", application_port);
     let _ = tokio::spawn(application.run_until_stopped());
 
-    return TestApp {
+    let test_app = TestApp {
         address,
         port: application_port,
         db_pool: get_connection_pool(&configuration.database),
         email_server,
+        test_user: TestUser::generate(),
         // is_pass: false,
     };
+    test_app.test_user.store(&test_app.db_pool).await;
+    return test_app;
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {

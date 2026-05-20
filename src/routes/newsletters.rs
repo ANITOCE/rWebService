@@ -1,14 +1,17 @@
-use actix_web::{HttpRequest, HttpResponse, web, ResponseError};
-use actix_web::http::{StatusCode, header};
 use actix_web::http::header::{HeaderMap, HeaderValue};
+use actix_web::http::{StatusCode, header};
+use actix_web::{HttpRequest, HttpResponse, ResponseError, web};
 use anyhow::Context;
-use sqlx::PgPool;
-use secrecy::Secret;
+use argon2::{Algorithm, Argon2, Params, Version, PasswordHasher};
 use base64::Engine;
+use chrono::format;
+use secrecy::{ExposeSecret, Secret};
+use sha3::Digest;
+use sqlx::PgPool;
 
+use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::routes::error_chain_fmt;
-use crate::domain::SubscriberEmail;
 
 #[derive(serde::Deserialize)]
 pub struct BodyData {
@@ -26,7 +29,7 @@ pub struct Content {
 pub enum PublishError {
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
-    
+
     #[error("Authentication failed")]
     AuthError(#[source] anyhow::Error),
 }
@@ -53,7 +56,7 @@ impl ResponseError for PublishError {
                     .insert(actix_web::http::header::WWW_AUTHENTICATE, header_value);
                 response
             }
-        }
+        };
     }
 }
 
@@ -99,7 +102,9 @@ fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Erro
 }
 
 #[tracing::instrument(name = "Get confirmed subscribers", skip(pool))]
-async fn get_confirmed_subscribers(pool: &PgPool) -> Result<Vec<Result<ConfirmedSubscriber, anyhow::Error>>, anyhow::Error> {
+async fn get_confirmed_subscribers(
+    pool: &PgPool,
+) -> Result<Vec<Result<ConfirmedSubscriber, anyhow::Error>>, anyhow::Error> {
     let confirmed_subscribers = sqlx::query!(
         r#"
         SELECT email FROM subscriptions WHERE status = 'confirmed'
@@ -110,19 +115,82 @@ async fn get_confirmed_subscribers(pool: &PgPool) -> Result<Vec<Result<Confirmed
     .into_iter()
     .map(|row| match SubscriberEmail::parse(row.email) {
         Ok(email) => Ok(ConfirmedSubscriber { email }),
-        Err(error) => Err(anyhow::anyhow!(error))
+        Err(error) => Err(anyhow::anyhow!(error)),
     })
     .collect();
     return Ok(confirmed_subscribers);
 }
 
+// #[tracing::instrument(name = "Validate credentials", skip(credentials, pool))]
+async fn validate_credentials(
+    credentials: Credentials,
+    pool: &PgPool,
+) -> Result<uuid::Uuid, PublishError> {
+    let hasher = Argon2::new(
+        Algorithm::Argon2id,
+        Version::V0x13,
+        Params::new(15000, 2, 1, None)
+            .context("Failed to build Argon2 parameters")
+            .map_err(PublishError::UnexpectedError)?,
+    );
+
+    let row: Option<_> = sqlx::query!(
+        r#"
+        SELECT user_id, password_hash, salt FROM users WHERE username = $1
+        "#,
+        credentials.username,
+    )
+    .fetch_optional(pool)
+    .await
+    .context("Failed to perform a query to retrieve stored credentials.")
+    .map_err(PublishError::UnexpectedError)?;
+
+    let (expected_password_hash, user_id, salt) = match row {
+        Some(row) => (row.password_hash, row.user_id, row.salt),
+        None => {
+            return Err(PublishError::AuthError(anyhow::anyhow!(
+                "Unknown username."
+            )));
+        }
+    };
+
+    let password_hash = hasher
+        .hash_password(
+            credentials.password.expose_secret().as_bytes(),
+            &salt,
+        )
+        .context("Failed to hash the password.")
+        .map_err(PublishError::UnexpectedError)?;
+
+    // Lowercase hexadecimal encoding.
+    let password_hash = format!("{:x}", password_hash.hash.unwrap());
+    
+    if password_hash != expected_password_hash {
+        return Err(PublishError::AuthError(anyhow::anyhow!(
+            "Invalid password."
+        )));
+    }else {
+        return Ok(user_id);
+    }
+}
+
+#[tracing::instrument(
+    name = "Publish a newsletter issue", 
+    skip(body, pool, email_client, request),
+    fields(username = tracing::field::Empty, user_id = tracing::field::Empty)
+)]
 pub async fn publish_newsletter(
     body: web::Json<BodyData>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
     request: HttpRequest,
 ) -> Result<HttpResponse, PublishError> {
-    let _credentials = basic_authentication(request.headers()).map_err(PublishError::AuthError)?;
+    let credentials = basic_authentication(request.headers()).map_err(PublishError::AuthError)?;
+    tracing::Span::current().record("username", tracing::field::display(&credentials.username));
+
+    let user_id = validate_credentials(credentials, &pool).await?;
+    tracing::Span::current().record("user_id", tracing::field::display(&user_id));
+
     let subscribers = get_confirmed_subscribers(&pool).await?;
     for subscriber in subscribers {
         match subscriber {
