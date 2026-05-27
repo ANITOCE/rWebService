@@ -2,8 +2,8 @@ use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError, web};
 use anyhow::Context;
 use chrono::Utc;
-use rand::RngExt;
-use rand::distr::Alphanumeric;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use serde::Deserialize;
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -102,7 +102,7 @@ pub async fn subscribe(
 
 /// Generate a random 25-characters-long case-sensitive subscription token.
 fn generate_subscription_token() -> String {
-    let mut rng = rand::rng();
+    let mut rng = thread_rng();
     return std::iter::repeat_with(|| rng.sample(Alphanumeric))
         .map(char::from)
         .take(25)

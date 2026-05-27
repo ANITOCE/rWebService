@@ -2,11 +2,10 @@ use actix_web::http::header::{HeaderMap, HeaderValue};
 use actix_web::http::{StatusCode, header};
 use actix_web::{HttpRequest, HttpResponse, ResponseError, web};
 use anyhow::Context;
-use argon2::{Algorithm, Argon2, Params, Version, PasswordHasher};
+use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use base64::Engine;
 use chrono::format;
 use secrecy::{ExposeSecret, Secret};
-use sha3::Digest;
 use sqlx::PgPool;
 
 use crate::domain::SubscriberEmail;
@@ -126,17 +125,9 @@ async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
 ) -> Result<uuid::Uuid, PublishError> {
-    let hasher = Argon2::new(
-        Algorithm::Argon2id,
-        Version::V0x13,
-        Params::new(15000, 2, 1, None)
-            .context("Failed to build Argon2 parameters")
-            .map_err(PublishError::UnexpectedError)?,
-    );
-
     let row: Option<_> = sqlx::query!(
         r#"
-        SELECT user_id, password_hash, salt FROM users WHERE username = $1
+        SELECT user_id, password_hash FROM users WHERE username = $1
         "#,
         credentials.username,
     )
@@ -145,8 +136,8 @@ async fn validate_credentials(
     .context("Failed to perform a query to retrieve stored credentials.")
     .map_err(PublishError::UnexpectedError)?;
 
-    let (expected_password_hash, user_id, salt) = match row {
-        Some(row) => (row.password_hash, row.user_id, row.salt),
+    let (expected_password_hash, user_id) = match row {
+        Some(row) => (row.password_hash, row.user_id),
         None => {
             return Err(PublishError::AuthError(anyhow::anyhow!(
                 "Unknown username."
@@ -154,24 +145,19 @@ async fn validate_credentials(
         }
     };
 
-    let password_hash = hasher
-        .hash_password(
-            credentials.password.expose_secret().as_bytes(),
-            &salt,
-        )
-        .context("Failed to hash the password.")
+    let expected_password_hash = PasswordHash::new(&expected_password_hash)
+        .context("Failed to parse hash in PHC string format.")
         .map_err(PublishError::UnexpectedError)?;
 
-    // Lowercase hexadecimal encoding.
-    let password_hash = format!("{:x}", password_hash.hash.unwrap());
+    Argon2::default()
+        .verify_password(
+            credentials.password.expose_secret().as_bytes(),
+            &expected_password_hash,
+        )
+        .context("Invalid password.")
+        .map_err(PublishError::AuthError)?;
     
-    if password_hash != expected_password_hash {
-        return Err(PublishError::AuthError(anyhow::anyhow!(
-            "Invalid password."
-        )));
-    }else {
-        return Ok(user_id);
-    }
+    return Ok(user_id);
 }
 
 #[tracing::instrument(
