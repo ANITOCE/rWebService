@@ -9,7 +9,7 @@ use tracing_actix_web::TracingLogger;
 
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
-use crate::routes::{health_check, subscribe, confirm, publish_newsletter};
+use crate::routes::{health_check, subscribe, confirm, publish_newsletter, home};
 
 // A new type to hold the newly built server and its port
 pub struct Application {
@@ -85,6 +85,7 @@ fn run(
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
             .route("/newsletters", web::post().to(publish_newsletter))
+            .route("/", web::get().to(home))
             // Get a pointer copy and attach it to the application state
             .app_data(db_pool.clone())
             .app_data(email_client.clone())
