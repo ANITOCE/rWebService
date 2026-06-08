@@ -37,6 +37,7 @@ pub struct ApplicationSettings {
     pub host: String,
     // The base URL of the application, used when constructing links in emails
     pub base_url: String,
+    pub hmac_secret: Secret<String>
 }
 
 #[derive(Deserialize, Clone)]
