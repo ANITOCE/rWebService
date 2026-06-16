@@ -1,14 +1,16 @@
 use actix_web::HttpResponse;
 use actix_web::error::InternalError;
-use actix_web::http::{header::LOCATION, StatusCode};
-use actix_web::{web, ResponseError};
-use hmac::{Hmac, Mac};
+use actix_web::http::header::LOCATION;
+use actix_web::web;
+use actix_web::cookie::Cookie;
+use actix_web_flash_messages::FlashMessage;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 
 use crate::authentication::{AuthError, Credentials, validate_credentials};
 use crate::routes::error_chain_fmt;
 use crate::startup::HmacSecret;
+use crate::session_state::TypedSession;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -17,14 +19,14 @@ pub struct FormData {
 }
 
 #[tracing::instrument(
-    skip(form, pool, secret),
+    skip(form, pool, session),
     fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
 )]
 // We are now injecting `PgPool` to retrieve stored credentials from the database
 pub async fn login(
     form: web::Form<FormData>,
     pool: web::Data<PgPool>,
-    secret: web::Data<HmacSecret>,
+    session: TypedSession,
 ) -> Result<HttpResponse, InternalError<LoginError>> {
     let credentials = Credentials {
         username: form.0.username,
@@ -34,8 +36,12 @@ pub async fn login(
     return match validate_credentials(credentials, &pool).await {
         Ok(user_id) => {
             tracing::Span::current().record("user_id", tracing::field::display(&user_id));
+            session.renew();
+            session
+                .insert_user_id(user_id)
+                .map_err(|e| login_redirect(LoginError::UnexpectedError(e.into())))?;
             Ok(HttpResponse::SeeOther()
-                .insert_header((LOCATION, "/"))
+                .insert_header((LOCATION, "/admin/dashboard"))
                 .finish())
         }
         Err(e) => {
@@ -43,20 +49,18 @@ pub async fn login(
                 AuthError::InvalidCredentials(_) => LoginError::AuthError(e.into()),
                 AuthError::UnexpectedError(_) => LoginError::UnexpectedError(e.into()),
             };
-            let query_string = format!("error={}", urlencoding::Encoded::new(e.to_string()));
-            let hmac_tag = {
-                let mut mac =
-                    Hmac::<sha2::Sha256>::new_from_slice(secret.0.expose_secret().as_bytes())
-                        .unwrap();
-                mac.update(query_string.as_bytes());
-                mac.finalize().into_bytes()
-            };
-            let response = HttpResponse::SeeOther()
-                .insert_header((LOCATION, format!("/login?{query_string}&tag={hmac_tag:x}")))
-                .finish();
-            Err(InternalError::from_response(e, response))
+            Err(login_redirect(e))
         }
     }
+}
+
+// Redirect to the login page with an error message.
+fn login_redirect(e: LoginError) -> InternalError<LoginError> {
+    FlashMessage::error(e.to_string()).send();
+    let response = HttpResponse::SeeOther()
+        .insert_header((LOCATION, "/login"))
+        .finish();
+    return InternalError::from_response(e, response);
 }
 
 #[derive(thiserror::Error)]

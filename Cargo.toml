@@ -12,11 +12,14 @@ name = "rWebService"
 
 [dependencies]
 actix-web = "4"
+actix-web-flash-messages = { version = "0.5", features = ["cookies"] }
+actix-session = { version = "0.10", features = ["redis-session-rustls"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1", features = ["derive"] }
 serde-aux = "4.7"
+serde_json = "1"
 config = "0.13"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 unicode-segmentation = "1.12"
 validator = { version = "0.20", features = ["derive"] }
@@ -75,4 +78,4 @@ features = [
 version = "0.12"
 default-features = false
 # We need the `json` feature flag to serialize/deserialize JSON payloads
-features = ["json", "rustls-tls"]
+features = ["json", "rustls-tls", "cookies"]

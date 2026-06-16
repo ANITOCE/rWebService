@@ -80,6 +80,7 @@ pub struct TestApp {
     pub email_server: MockServer,
 
     pub test_user: TestUser,
+    pub api_client: reqwest::Client,
 }
 
 /// Confirmation links embedded in the request to the email API.
@@ -139,6 +140,77 @@ impl TestApp {
     //     self.is_pass = std::panic::catch_unwind(test).is_ok();
     //     return self.is_pass;
     // }
+
+    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        return self.api_client
+            .post(&format!("{}/login", &self.address))
+            // This `reqwest` method makes sure that the body is URL-encoded
+            // and the `Content-Type` header is set accordingly.
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request.");
+    }
+
+    // Our tests will only look at the HTML page, therefore
+    // we do not expose the underlying reqwest::Response
+    pub async fn get_login_html(&self) -> String {
+        return self.api_client
+            .get(&format!("{}/login", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+            .text()
+            .await
+            .unwrap();
+    }
+
+    pub async fn get_admin_dashboard(&self) -> reqwest::Response {
+        return self.api_client
+            .get(&format!("{}/admin/dashboard", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn get_admin_dashboard_html(&self) -> String {
+        return self.get_admin_dashboard().await.text().await.unwrap();
+    }
+
+    pub async fn get_change_password(&self) -> reqwest::Response {
+        return self.api_client
+            .get(&format!("{}/admin/password", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.");
+    }
+
+    pub async fn get_change_password_html(&self) -> String {
+        return self.get_change_password().await.text().await.unwrap();
+    }
+
+    pub async fn post_logout(&self) -> reqwest::Response {
+        return self.api_client
+            .post(&format!("{}/admin/logout", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.");
+    }
+
+    pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        self.api_client
+            .post(&format!("{}/admin/password", &self.address))
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
 }
 
 // Launch our application in the background ~somehow~
@@ -173,6 +245,12 @@ pub async fn spawn_app() -> TestApp {
     let address = format!("http://localhost:{}", application_port);
     let _ = tokio::spawn(application.run_until_stopped());
 
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .cookie_store(true)
+        .build()
+        .unwrap();
+
     let test_app = TestApp {
         address,
         port: application_port,
@@ -180,6 +258,7 @@ pub async fn spawn_app() -> TestApp {
         email_server,
         test_user: TestUser::generate(),
         // is_pass: false,
+        api_client: client,
     };
     test_app.test_user.store(&test_app.db_pool).await;
     return test_app;
@@ -234,4 +313,9 @@ pub async fn delect_test_database(config: &DatabaseSettings) {
         .execute(format!(r#"DROP DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to delete database.");
+}
+
+pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
+    assert_eq!(response.status().as_u16(), 303);
+    assert_eq!(response.headers().get("Location").unwrap(), location);
 }
